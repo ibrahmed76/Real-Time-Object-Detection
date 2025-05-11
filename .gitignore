@@ -1,0 +1,11 @@
+# Virtual Environment
+venv/
+env/
+ENV/
+.env/
+.venv/
+
+# Models directory
+models/
+models/*
+!models/.gitkeep
