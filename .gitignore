@@ -9,3 +9,8 @@ ENV/
 models/
 models/*
 !models/.gitkeep
+
+# Images directory
+images/
+images/*
+!images/.gitkeep
