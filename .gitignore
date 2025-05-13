@@ -14,3 +14,8 @@ models/*
 images/
 images/*
 !images/.gitkeep
+
+# Gradio cache
+.gradio/
+.gradio/*
+!gradio/.gitkeep
