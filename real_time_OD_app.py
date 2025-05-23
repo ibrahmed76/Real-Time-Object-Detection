@@ -5,96 +5,225 @@ from ultralytics import YOLO
 from PIL import Image
 from transformers import DFineForObjectDetection, AutoImageProcessor
 import sys
+from pathlib import Path
+import time
+from datetime import datetime
+from typing import Dict, List, Tuple, Optional
+
+from src.utils.tracker import PersonTracker, BehaviorAnalyzer
+from src.utils.logger import BehaviorLogger
 
 # Model paths
-YOLO_MODEL_PATH = 'models/yolo11x.pt'
-DFINE_MODEL_PATH = '/home/ibrahim/Documents/Study/Computer Vision/Project/models/DFINE/models--ustc-community--dfine-xlarge-obj2coco/snapshots/15f18d917eaddcedf9e3ffb082adcfb97a0b2d4d'
+YOLO_MODEL_PATH = 'models/yolo11s.pt'
+DFINE_MODEL_PATH = '/home/ibrahim/Documents/Study/Computer Vision/Project/models/DFINE/models--ustc-community--dfine-small-obj2coco/snapshots/2b548d12a7623d674bb2aa2bf24022ce090b7736'
 
-def process_image_yolo(image, yolo_model):
-    results = yolo_model(image, conf=0.5, device="cpu")
-    for result in results:
-        boxes = result.boxes
-        for box in boxes:
-            x1, y1, x2, y2 = box.xyxy[0]
-            x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
-            cls = int(box.cls[0])
-            conf = float(box.conf[0])
-            class_name = yolo_model.names[cls]
-            cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            label = f"{class_name}: {conf:.2f}"
-            cv2.putText(image, label, (x1, y1 - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-    return image
-
-def process_image_dfine(image, dfine_model, dfine_processor, device):
-    pil_image = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-    inputs = dfine_processor(images=pil_image, return_tensors="pt")
-    inputs = {k: v.to(device) for k, v in inputs.items()}
-    with torch.no_grad():
-        outputs = dfine_model(**inputs)
-    results = dfine_processor.post_process_object_detection(
-        outputs,
-        target_sizes=torch.tensor([pil_image.size[::-1]]),
-        threshold=0.3
-    )
-    image_np = np.array(pil_image)
-    for result in results:
-        for score, label_id, box in zip(result["scores"], result["labels"], result["boxes"]):
-            score = score.item()
-            label = dfine_model.config.id2label[label_id.item()]
-            box = [int(i) for i in box.tolist()]
-            cv2.rectangle(image_np, (box[0], box[1]), (box[2], box[3]), (0, 255, 0), 2)
-            label_text = f"{label}: {score:.2f}"
-            cv2.putText(image_np, label_text, (box[0], box[1] - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-    return cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
+class SmartRoomMonitor:
+    def __init__(self, device: str = 'cpu'):
+        self.device = device
+        
+        # Initialize both models
+        print("Loading YOLO model...")
+        self.yolo_model = YOLO(YOLO_MODEL_PATH)
+        
+        print("Loading DFine model...")
+        self.dfine_processor = AutoImageProcessor.from_pretrained(DFINE_MODEL_PATH)
+        self.dfine_model = DFineForObjectDetection.from_pretrained(DFINE_MODEL_PATH)
+        self.dfine_model = self.dfine_model.to(device)
+            
+        # Initialize tracker and analyzer
+        self.tracker = PersonTracker()
+        self.behavior_analyzer = BehaviorAnalyzer()
+        self.logger = BehaviorLogger()
+        
+        # Initialize statistics
+        self.frame_count = 0
+        self.fps = 0
+        self.prev_time = time.time()
+        
+    def process_frame(self, frame: np.ndarray) -> Tuple[np.ndarray, Dict[str, int]]:
+        """Process a single frame using both models"""
+        # Calculate FPS
+        current_time = time.time()
+        self.fps = 1 / (current_time - self.prev_time)
+        self.prev_time = current_time
+        
+        # Get YOLO detections
+        yolo_results = self.yolo_model(frame, conf=0.5, device=self.device)
+        yolo_detections = []
+        phone_boxes = []
+        
+        for result in yolo_results:
+            boxes = result.boxes
+            for box in boxes:
+                x1, y1, x2, y2 = map(int, box.xyxy[0])
+                cls = int(box.cls[0])
+                conf = float(box.conf[0])
+                class_name = self.yolo_model.names[cls]
+                
+                if class_name == 'person':
+                    yolo_detections.append({
+                        'bbox': (x1, y1, x2, y2),
+                        'class': 'person',
+                        'confidence': conf,
+                        'source': 'yolo'
+                    })
+                elif class_name == 'cell phone':
+                    phone_boxes.append((x1, y1, x2, y2))
+        
+        # Get DFine detections
+        pil_image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        inputs = self.dfine_processor(images=pil_image, return_tensors="pt")
+        inputs = {k: v.to(self.device) for k, v in inputs.items()}
+        
+        with torch.no_grad():
+            dfine_outputs = self.dfine_model(**inputs)
+            
+        dfine_results = self.dfine_processor.post_process_object_detection(
+            dfine_outputs,
+            target_sizes=torch.tensor([pil_image.size[::-1]]),
+            threshold=0.3
+        )
+        
+        dfine_detections = []
+        
+        for result in dfine_results:
+            for score, label_id, box in zip(result["scores"], result["labels"], result["boxes"]):
+                score = score.item()
+                label = self.dfine_model.config.id2label[label_id.item()]
+                box = [int(i) for i in box.tolist()]
+                
+                if label == 'person':
+                    dfine_detections.append({
+                        'bbox': tuple(box),
+                        'class': 'person',
+                        'confidence': score,
+                        'source': 'dfine'
+                    })
+        
+        # Combine detections using non-maximum suppression
+        combined_detections = self._combine_detections(yolo_detections, dfine_detections)
+        
+        # Update tracking and get behaviors
+        frame, behaviors = self.tracker.update(frame, combined_detections)
+        
+        # Analyze behaviors for each tracked person
+        for track_id, person_data in self.tracker.tracked_people.items():
+            if 'bbox' in person_data:
+                # Analyze pose using both models
+                pose = self.behavior_analyzer.analyze_pose(person_data['bbox'])
+                if pose == 'standing':
+                    behaviors['standing'] += 1
+                else:
+                    behaviors['sitting'] += 1
+                
+                # Check phone usage
+                if self.behavior_analyzer.check_phone_usage(person_data['bbox'], phone_boxes):
+                    behaviors['using_phone'] += 1
+                
+                # Log behavior change
+                if person_data.get('last_behavior') != pose:
+                    self.logger.log_event('behavior_change', track_id, pose, behaviors)
+                    person_data['last_behavior'] = pose
+        
+        # Log frame statistics
+        self.logger.log_frame(self.frame_count, behaviors)
+        self.frame_count += 1
+        
+        # Add statistics overlay
+        cv2.putText(frame, f"FPS: {self.fps:.1f}", (10, 30),
+                   cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        cv2.putText(frame, f"Total: {behaviors['total']}", (10, 60),
+                   cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        cv2.putText(frame, f"Standing: {behaviors['standing']}", (10, 90),
+                   cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        cv2.putText(frame, f"Sitting: {behaviors['sitting']}", (10, 120),
+                   cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        cv2.putText(frame, f"Using Phone: {behaviors['using_phone']}", (10, 150),
+                   cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        
+        return frame, behaviors
+    
+    def _combine_detections(self, yolo_dets: List[Dict], dfine_dets: List[Dict]) -> List[Dict]:
+        """Combine detections from both models using NMS"""
+        all_detections = yolo_dets + dfine_dets
+        if not all_detections:
+            return []
+            
+        # Sort by confidence
+        all_detections.sort(key=lambda x: x['confidence'], reverse=True)
+        
+        # Apply NMS
+        final_detections = []
+        used_boxes = set()
+        
+        for det in all_detections:
+            x1, y1, x2, y2 = det['bbox']
+            current_box = (x1, y1, x2, y2)
+            
+            # Check if this box overlaps with any used box
+            overlap = False
+            for used_box in used_boxes:
+                if self._calculate_iou(current_box, used_box) > 0.5:
+                    overlap = True
+                    break
+            
+            if not overlap:
+                final_detections.append(det)
+                used_boxes.add(current_box)
+        
+        return final_detections
+    
+    def _calculate_iou(self, box1: Tuple[int, int, int, int], box2: Tuple[int, int, int, int]) -> float:
+        """Calculate Intersection over Union between two boxes"""
+        x1 = max(box1[0], box2[0])
+        y1 = max(box1[1], box2[1])
+        x2 = min(box1[2], box2[2])
+        y2 = min(box1[3], box2[3])
+        
+        intersection = max(0, x2 - x1) * max(0, y2 - y1)
+        
+        box1_area = (box1[2] - box1[0]) * (box1[3] - box1[1])
+        box2_area = (box2[2] - box2[0]) * (box2[3] - box2[1])
+        
+        union = box1_area + box2_area - intersection
+        
+        return intersection / union if union > 0 else 0
+    
+    def close(self):
+        """Clean up resources"""
+        self.logger.close()
 
 def main():
-    print("Select model for real-time object detection:")
-    print("1. YOLO")
-    print("2. DFine")
-    choice = input("Enter 1 or 2: ").strip()
-    if choice == '1':
-        model_type = 'YOLO'
-    elif choice == '2':
-        model_type = 'DFine'
-    else:
-        print("Invalid choice. Exiting.")
-        sys.exit(1)
-
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
-
-    if model_type == 'YOLO':
-        print("Loading YOLO model...")
-        yolo_model = YOLO(YOLO_MODEL_PATH)
-        dfine_model = None
-        dfine_processor = None
-    else:
-        print("Loading DFine model...")
-        dfine_processor = AutoImageProcessor.from_pretrained(DFINE_MODEL_PATH)
-        dfine_model = DFineForObjectDetection.from_pretrained(DFINE_MODEL_PATH)
-        dfine_model = dfine_model.to(device)
-        yolo_model = None
-
+    
+    # Initialize monitor
+    monitor = SmartRoomMonitor(device=device)
+    
+    # Initialize webcam
     cap = cv2.VideoCapture(0)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    
     print("Press 'q' to quit.")
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            print("Failed to grab frame.")
-            break
-        if model_type == 'YOLO':
-            processed = process_image_yolo(frame, yolo_model)
-        else:
-            processed = process_image_dfine(frame, dfine_model, dfine_processor, device)
-        cv2.imshow("Real-Time Object Detection", processed)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-    cap.release()
-    cv2.destroyAllWindows()
+    
+    try:
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                print("Failed to grab frame.")
+                break
+                
+            processed_frame, behaviors = monitor.process_frame(frame)
+            cv2.imshow("Smart Room Monitor", processed_frame)
+            
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+                
+    finally:
+        cap.release()
+        cv2.destroyAllWindows()
+        monitor.close()
 
 if __name__ == "__main__":
     main() 

@@ -1,80 +1,150 @@
-# Object Detection App
+# Smart Room Monitoring System
 
-This project provides two main ways to perform object detection using YOLO or DFine models:
+A real-time room monitoring system that uses computer vision to track people, their poses, and activities in a room. The system provides two different implementations using YOLO and DFine models for object detection.
 
-## 1. Gradio Web App
+## Features
 
-- **Folder Processing:**
-  - Place your images and videos in the `images/input` directory.
-  - Select the model (YOLO or DFine) and click "Process Folder".
-  - Results will be saved in a `results` folder next to your input folder, under a subfolder for the selected model.
+### Core Features
+- Real-time people detection and tracking
+- Entry/exit counting
+- Pose analysis (standing/sitting detection)
+- Phone usage detection
+- FPS monitoring
+- Comprehensive logging system
 
-- **Single Image/Video Processing:**
-  - Upload an image or video file.
-  - Select the model (YOLO or DFine) and click "Process File".
-  - The processed image or video will be displayed or the output file path will be shown.
+### Monitoring Capabilities
+- Total people count in the room
+- Standing vs. sitting count
+- Phone usage tracking
+- Real-time visual feedback
+- Entry/exit line visualization
 
-- **Webcam:**
-  - **Webcam detection is NOT included in the Gradio app.**
-  - See below for the standalone webcam script.
-
-### To Run the Gradio App
-```bash
-python object_detection_app.py
-```
-- The app will open in your browser at `http://127.0.0.1:7860`.
-
-## 2. Real-Time Webcam Detection (Standalone Script)
-
-- Run the script:
-```bash
-python real_time_OD_app.py
-```
-- You will be prompted to select a model (YOLO or DFine).
-- The webcam window will open and show real-time detections.
-- Press `q` to quit.
+### Logging System
+- Automatic log creation with timestamps
+- Dual format logging (CSV and JSON)
+- Detailed frame-by-frame statistics
+- Easy data analysis and visualization
 
 ## Requirements
-- Python 3.8+
-- Install dependencies:
+
+### Hardware Requirements
+- Webcam or IP camera
+- CUDA-capable GPU (recommended) or CPU
+- Minimum 4GB RAM
+
+### Software Requirements
+```bash
+# Core dependencies
+torch>=2.0.0
+opencv-python>=4.5.0
+numpy>=1.19.0
+Pillow>=8.0.0
+
+# YOLO specific
+ultralytics>=8.0.0
+
+# DFine specific
+transformers>=4.0.0
+```
+
+## Installation
+
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd smart-room-monitor
+```
+
+2. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-## Setup
+3. Download models:
+- YOLO model will be downloaded automatically on first run
+- DFine model should be placed in the specified path
 
-1. Create the models directory:
+## Usage
+
+### Running YOLO Monitor
 ```bash
-mkdir models
+python yolo_detection.py
 ```
 
-2. Download YOLOv11x model:
-   - Visit [YOLOv11 Documentation](https://docs.ultralytics.com/tasks/detect/)
-   - Download the YOLOv11x model
-   - Place the downloaded `yolo11x.pt` file in the `models` directory
-
-3. Download DFine model:
-   - Download the DFine model files as required (see HuggingFace or project instructions)
-   - Place the DFine model files in the path specified in the scripts (see `DFINE_MODEL_PATH` in both scripts)
-
-## Folder Structure
+### Running DFine Monitor
+```bash
+python dfine_detection.py
 ```
-project_root/
-├── models/
-│   ├── yolo11x.pt
-│   └── DFINE/... (DFine model files)
-├── images/
-│   └── input/   # Place your images and videos here
-├── results/
-│   └── ...      # Processed outputs will be saved here
-├── object_detection_app.py
-├── real_time_OD_app.py
+
+### Controls
+- Press 'q' to quit the application
+- The system will automatically save logs before closing
+
+## Log Files
+
+### Location
+- Logs are stored in the `logs` directory
+- Each session creates timestamped log files
+
+### File Formats
+1. CSV Logs:
+   - Timestamp
+   - Frame number
+   - Total count
+   - Standing count
+   - Sitting count
+   - Phone usage count
+
+2. JSON Logs:
+   - Detailed frame-by-frame data
+   - Timestamp information
+   - Behavior statistics
+
+## Model Comparison
+
+### YOLO Monitor
+- Faster processing
+- Better real-time performance
+- More robust detection
+- Suitable for general monitoring
+
+### DFine Monitor
+- More detailed detection
+- Better accuracy for specific objects
+- More precise pose estimation
+- Suitable for detailed analysis
+
+## Directory Structure
+```
+smart-room-monitor/
+├── yolo_detection.py
+├── dfine_detection.py
 ├── requirements.txt
-└── README.md
+├── README.md
+├── models/
+│   ├── yolo11s.pt
+│   └── DFINE/
+└── logs/
+    ├── yolo_room_log_*.csv
+    ├── yolo_room_log_*.json
+    ├── dfine_room_log_*.csv
+    └── dfine_room_log_*.json
 ```
 
-## Notes
-- For best results, ensure your input images/videos are clear and well-lit.
-- The DFine model may require more memory and time to process than YOLO.
-- If you encounter issues with model paths, update the `YOLO_MODEL_PATH` and `DFINE_MODEL_PATH` variables in the scripts.
+## Contributing
 
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Acknowledgments
+
+- YOLO model: [Ultralytics](https://github.com/ultralytics/yolov5)
+- DFine model: [USTC Community](https://github.com/ustc-community/dfine)
+- OpenCV for computer vision capabilities

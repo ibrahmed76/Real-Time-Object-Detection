@@ -7,8 +7,8 @@ from transformers import DFineForObjectDetection, AutoImageProcessor
 url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
 image = Image.open(requests.get(url, stream=True).raw)
 
-image_processor = AutoImageProcessor.from_pretrained("ustc-community/dfine-xlarge-obj2coco",cache_dir="/home/ibrahim/Documents/Study/Computer Vision/Project/models/DFINE")
-model = DFineForObjectDetection.from_pretrained("ustc-community/dfine-xlarge-obj2coco",cache_dir="/home/ibrahim/Documents/Study/Computer Vision/Project/models/DFINE")
+image_processor = AutoImageProcessor.from_pretrained("ustc-community/dfine-small-obj2coco",cache_dir="/home/ibrahim/Documents/Study/Computer Vision/Project/models/DFINE")
+model = DFineForObjectDetection.from_pretrained("ustc-community/dfine-small-obj2coco",cache_dir="/home/ibrahim/Documents/Study/Computer Vision/Project/models/DFINE")
 
 inputs = image_processor(images=image, return_tensors="pt")
 

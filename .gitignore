@@ -6,12 +6,10 @@ ENV/
 .venv/
 
 # Models directory
-models/
 models/*
 !models/.gitkeep
 
 # Images directory
-images/
 images/*
 !images/.gitkeep
 
@@ -19,3 +17,8 @@ images/*
 .gradio/
 .gradio/*
 !gradio/.gitkeep
+
+# Logs directory
+logs/
+logs/*
+!logs/.gitkeep
