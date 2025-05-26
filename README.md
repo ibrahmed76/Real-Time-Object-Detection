@@ -147,29 +147,23 @@ pip install -r requirements.txt
 ### Key Dependencies
 
 1. **Core Dependencies**
-   - PyTorch (>=2.0.0) - Deep learning framework
-   - OpenCV (>=4.5.0) - Computer vision operations
-   - NumPy (>=1.19.0) - Numerical computations
-   - Pillow (>=8.0.0) - Image processing
+   - `torch` (>=2.0.0) - Deep learning framework
+   - `opencv-python` (>=4.5.0) - Computer vision operations
+   - `numpy` (>=1.19.0) - Numerical computations
+   - `Pillow` (>=8.0.0) - Image processing
 
-2. **Model-Specific Dependencies**
-   - Ultralytics (>=8.0.0) - YOLO implementation
-   - Transformers (>=4.0.0) - DFine model support
-   - gdown (>=4.7.0) - Model downloading
+2. **YOLO Specific**
+   - `ultralytics` (>=8.0.0) - YOLO implementation
 
-3. **Utility Dependencies**
-   - tqdm (>=4.65.0) - Progress bars
-   - PyYAML (>=6.0) - Configuration files
-   - matplotlib (>=3.5.0) - Visualization
-   - seaborn (>=3.12.0) - Statistical visualization
+3. **DFine Specific**
+   - `transformers` (>=4.0.0) - DFine model support
 
-4. **Optional GUI Dependencies**
-   - PyQt5 (>=5.15.0) - Desktop interface
-   - Flask (>=2.0.0) - Web interface
+4. **Utilities**
+   - `tqdm` (>=4.65.0) - Progress bars
+   - `PyYAML` (>=6.0) - Configuration files
 
-5. **Additional Tools**
-   - gradio (>=4.0.0) - Web interface
-
+5. **Web Interface**
+   - `gradio` (>=3.0.0) - Web UI for object detection app
 ## Usage
 
 ### Room Monitoring
