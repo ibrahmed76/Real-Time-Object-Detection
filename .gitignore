@@ -14,6 +14,7 @@ images/*
 !images/.gitkeep
 
 # Gradio cache
+gradio/
 .gradio/
 .gradio/*
 !gradio/.gitkeep
