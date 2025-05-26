@@ -9,7 +9,7 @@ import csv
 import json
 
 # Model path
-YOLO_MODEL_PATH = 'models/yolo11s.pt'
+YOLO_MODEL_PATH = 'trained_models/trained_model4.pt'
 
 class YOLORoomMonitor:
     def __init__(self, device: str = 'cpu'):
@@ -25,6 +25,7 @@ class YOLORoomMonitor:
         self.total_count = 0
         self.last_positions = {}
         self.tracked_people = {}
+        self.current_people = set()  # Track current people in frame
         
         # Initialize logging
         self.setup_logging()
@@ -98,7 +99,7 @@ class YOLORoomMonitor:
         
         # Initialize behavior counts
         behaviors = {
-            'total': self.total_count,
+            'total': 0,  # Will be updated based on current detections
             'standing': 0,
             'sitting': 0,
             'using_phone': 0
@@ -106,6 +107,9 @@ class YOLORoomMonitor:
         
         # Track phones
         phone_boxes = []
+        
+        # Clear current people set for this frame
+        self.current_people.clear()
         
         # Process detections
         for result in results:
@@ -120,10 +124,12 @@ class YOLORoomMonitor:
                     # Calculate center point for entry/exit detection
                     center_y = (y1 + y2) / 2
                     person_id = f"{x1}_{y1}_{x2}_{y2}"  # Simple ID based on position
+                    self.current_people.add(person_id)
                     
                     # Check for entry/exit
                     if person_id not in self.last_positions:
                         self.last_positions[person_id] = center_y
+                        self.total_count += 1  # New person detected
                     else:
                         last_y = self.last_positions[person_id]
                         if last_y < entry_y and center_y >= entry_y:
@@ -153,6 +159,12 @@ class YOLORoomMonitor:
                     cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
                     cv2.putText(frame, f"Phone: {conf:.2f}", (x1, y1 - 10),
                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+        
+        # Update total count based on current detections
+        behaviors['total'] = len(self.current_people)
+        
+        # Clean up old positions
+        self.last_positions = {k: v for k, v in self.last_positions.items() if k in self.current_people}
         
         # Draw entry line
         cv2.line(frame, (0, entry_y), (frame.shape[1], entry_y), (0, 0, 255), 2)

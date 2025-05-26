@@ -39,6 +39,7 @@ class SmartRoomMonitor:
         self.frame_count = 0
         self.fps = 0
         self.prev_time = time.time()
+        self.current_people = set()  # Track current people in frame
         
     def process_frame(self, frame: np.ndarray) -> Tuple[np.ndarray, Dict[str, int]]:
         """Process a single frame using both models"""
@@ -46,6 +47,9 @@ class SmartRoomMonitor:
         current_time = time.time()
         self.fps = 1 / (current_time - self.prev_time)
         self.prev_time = current_time
+        
+        # Clear current people set for this frame
+        self.current_people.clear()
         
         # Get YOLO detections
         yolo_results = self.yolo_model(frame, conf=0.5, device=self.device)
@@ -61,11 +65,14 @@ class SmartRoomMonitor:
                 class_name = self.yolo_model.names[cls]
                 
                 if class_name == 'person':
+                    person_id = f"yolo_{x1}_{y1}_{x2}_{y2}"
+                    self.current_people.add(person_id)
                     yolo_detections.append({
                         'bbox': (x1, y1, x2, y2),
                         'class': 'person',
                         'confidence': conf,
-                        'source': 'yolo'
+                        'source': 'yolo',
+                        'id': person_id
                     })
                 elif class_name == 'cell phone':
                     phone_boxes.append((x1, y1, x2, y2))
@@ -93,41 +100,49 @@ class SmartRoomMonitor:
                 box = [int(i) for i in box.tolist()]
                 
                 if label == 'person':
+                    person_id = f"dfine_{box[0]}_{box[1]}_{box[2]}_{box[3]}"
+                    self.current_people.add(person_id)
                     dfine_detections.append({
                         'bbox': tuple(box),
                         'class': 'person',
                         'confidence': score,
-                        'source': 'dfine'
+                        'source': 'dfine',
+                        'id': person_id
                     })
         
         # Combine detections using non-maximum suppression
         combined_detections = self._combine_detections(yolo_detections, dfine_detections)
         
-        # Update tracking and get behaviors
-        frame, behaviors = self.tracker.update(frame, combined_detections)
+        # Initialize behaviors
+        behaviors = {
+            'total': len(self.current_people),
+            'standing': 0,
+            'sitting': 0,
+            'using_phone': 0
+        }
         
-        # Analyze behaviors for each tracked person
-        for track_id, person_data in self.tracker.tracked_people.items():
-            if 'bbox' in person_data:
-                # Analyze pose using both models
-                pose = self.behavior_analyzer.analyze_pose(person_data['bbox'])
+        # Process each detection
+        for detection in combined_detections:
+            if detection['class'] == 'person':
+                # Analyze pose
+                pose = self.behavior_analyzer.analyze_pose(detection['bbox'])
                 if pose == 'standing':
                     behaviors['standing'] += 1
                 else:
                     behaviors['sitting'] += 1
                 
                 # Check phone usage
-                if self.behavior_analyzer.check_phone_usage(person_data['bbox'], phone_boxes):
+                if self.behavior_analyzer.check_phone_usage(detection['bbox'], phone_boxes):
                     behaviors['using_phone'] += 1
                 
-                # Log behavior change
-                if person_data.get('last_behavior') != pose:
-                    self.logger.log_event('behavior_change', track_id, pose, behaviors)
-                    person_data['last_behavior'] = pose
-        
-        # Log frame statistics
-        self.logger.log_frame(self.frame_count, behaviors)
-        self.frame_count += 1
+                # Draw bounding box
+                x1, y1, x2, y2 = detection['bbox']
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                
+                # Draw label
+                label = f"Person ({pose}): {detection['confidence']:.2f}"
+                cv2.putText(frame, label, (x1, y1 - 10),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
         
         # Add statistics overlay
         cv2.putText(frame, f"FPS: {self.fps:.1f}", (10, 30),
@@ -140,6 +155,10 @@ class SmartRoomMonitor:
                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         cv2.putText(frame, f"Using Phone: {behaviors['using_phone']}", (10, 150),
                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        
+        # Log frame statistics
+        self.logger.log_frame(self.frame_count, behaviors)
+        self.frame_count += 1
         
         return frame, behaviors
     

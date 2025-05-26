@@ -28,6 +28,7 @@ class DFineRoomMonitor:
         self.total_count = 0
         self.last_positions = {}
         self.tracked_people = {}
+        self.current_people = set()  # Track current people in frame
         
         # Initialize logging
         self.setup_logging()
@@ -119,11 +120,14 @@ class DFineRoomMonitor:
         
         # Initialize behavior counts
         behaviors = {
-            'total': self.total_count,
+            'total': 0,  # Will be updated based on current detections
             'standing': 0,
             'sitting': 0,
             'using_phone': 0
         }
+        
+        # Clear current people set for this frame
+        self.current_people.clear()
         
         # Process detections
         for result in results:
@@ -136,10 +140,12 @@ class DFineRoomMonitor:
                     # Calculate center point for entry/exit detection
                     center_y = (box[1] + box[3]) / 2
                     person_id = f"{box[0]}_{box[1]}_{box[2]}_{box[3]}"
+                    self.current_people.add(person_id)
                     
                     # Check for entry/exit
                     if person_id not in self.last_positions:
                         self.last_positions[person_id] = center_y
+                        self.total_count += 1  # New person detected
                     else:
                         last_y = self.last_positions[person_id]
                         if last_y < entry_y and center_y >= entry_y:
@@ -168,6 +174,12 @@ class DFineRoomMonitor:
                     cv2.rectangle(frame_np, (box[0], box[1]), (box[2], box[3]), (255, 0, 0), 2)
                     cv2.putText(frame_np, f"Phone: {score:.2f}", (box[0], box[1] - 10),
                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+        
+        # Update total count based on current detections
+        behaviors['total'] = len(self.current_people)
+        
+        # Clean up old positions
+        self.last_positions = {k: v for k, v in self.last_positions.items() if k in self.current_people}
         
         # Draw entry line
         cv2.line(frame_np, (0, entry_y), (frame_np.shape[1], entry_y), (0, 0, 255), 2)
