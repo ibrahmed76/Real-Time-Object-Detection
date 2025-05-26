@@ -31,7 +31,7 @@ def initialize_models():
         device = "cpu"
     
     # Initialize YOLO model
-    yolo_model = YOLO('trained_models/trained_model4.pt')
+    yolo_model = YOLO('trained_models/trained_model6.pt')
     
     # Initialize DFine model
     model_path = "/home/ibrahim/Documents/Study/Computer Vision/Project/models/DFINE/models--ustc-community--dfine-xlarge-obj2coco/snapshots/15f18d917eaddcedf9e3ffb082adcfb97a0b2d4d"

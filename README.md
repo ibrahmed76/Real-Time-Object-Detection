@@ -168,10 +168,7 @@ pip install -r requirements.txt
    - Flask (>=2.0.0) - Web interface
 
 5. **Additional Tools**
-   - deep-sort-realtime (>=1.3.2) - Object tracking
-   - mediapipe (>=0.8.9) - Pose estimation
    - gradio (>=4.0.0) - Web interface
-   - plotly (>=5.18.0) - Interactive plots
 
 ## Usage
 

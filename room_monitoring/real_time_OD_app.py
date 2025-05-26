@@ -14,7 +14,7 @@ from src.utils.tracker import PersonTracker, BehaviorAnalyzer
 from src.utils.logger import BehaviorLogger
 
 # Model paths
-YOLO_MODEL_PATH = 'models/yolo11s.pt'
+YOLO_MODEL_PATH = 'trained_models/trained_model6.pt'  # Updated to model 6
 DFINE_MODEL_PATH = '/home/ibrahim/Documents/Study/Computer Vision/Project/models/DFINE/models--ustc-community--dfine-small-obj2coco/snapshots/2b548d12a7623d674bb2aa2bf24022ce090b7736'
 
 class SmartRoomMonitor:
@@ -24,11 +24,14 @@ class SmartRoomMonitor:
         # Initialize both models
         print("Loading YOLO model...")
         self.yolo_model = YOLO(YOLO_MODEL_PATH)
+        print(f"YOLO model loaded successfully from {YOLO_MODEL_PATH}")
+        print(f"YOLO model classes: {self.yolo_model.names}")
         
         print("Loading DFine model...")
         self.dfine_processor = AutoImageProcessor.from_pretrained(DFINE_MODEL_PATH)
         self.dfine_model = DFineForObjectDetection.from_pretrained(DFINE_MODEL_PATH)
         self.dfine_model = self.dfine_model.to(device)
+        print("DFine model loaded successfully")
             
         # Initialize tracker and analyzer
         self.tracker = PersonTracker()
@@ -51,11 +54,19 @@ class SmartRoomMonitor:
         # Clear current people set for this frame
         self.current_people.clear()
         
-        # Get YOLO detections
-        yolo_results = self.yolo_model(frame, conf=0.5, device=self.device)
+        # Get YOLO detections with lower confidence threshold
+        yolo_results = self.yolo_model(frame, conf=0.25, device=self.device)
         yolo_detections = []
-        phone_boxes = []
         
+        # Initialize behaviors
+        behaviors = {
+            'total': 0,
+            'standing': 0,
+            'sitting': 0,
+            'using_phone': 0
+        }
+        
+        # Process YOLO detections
         for result in yolo_results:
             boxes = result.boxes
             for box in boxes:
@@ -64,90 +75,50 @@ class SmartRoomMonitor:
                 conf = float(box.conf[0])
                 class_name = self.yolo_model.names[cls]
                 
-                if class_name == 'person':
+                # Only track people (sitting or standing)
+                if class_name in ['sitting', 'standing']:
                     person_id = f"yolo_{x1}_{y1}_{x2}_{y2}"
                     self.current_people.add(person_id)
                     yolo_detections.append({
                         'bbox': (x1, y1, x2, y2),
-                        'class': 'person',
+                        'class': class_name,
                         'confidence': conf,
                         'source': 'yolo',
                         'id': person_id
                     })
-                elif class_name == 'cell phone':
-                    phone_boxes.append((x1, y1, x2, y2))
-        
-        # Get DFine detections
-        pil_image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        inputs = self.dfine_processor(images=pil_image, return_tensors="pt")
-        inputs = {k: v.to(self.device) for k, v in inputs.items()}
-        
-        with torch.no_grad():
-            dfine_outputs = self.dfine_model(**inputs)
-            
-        dfine_results = self.dfine_processor.post_process_object_detection(
-            dfine_outputs,
-            target_sizes=torch.tensor([pil_image.size[::-1]]),
-            threshold=0.3
-        )
-        
-        dfine_detections = []
-        
-        for result in dfine_results:
-            for score, label_id, box in zip(result["scores"], result["labels"], result["boxes"]):
-                score = score.item()
-                label = self.dfine_model.config.id2label[label_id.item()]
-                box = [int(i) for i in box.tolist()]
+                    
+                    # Update behavior counts
+                    if class_name == 'standing':
+                        behaviors['standing'] += 1
+                    elif class_name == 'sitting':
+                        behaviors['sitting'] += 1
                 
-                if label == 'person':
-                    person_id = f"dfine_{box[0]}_{box[1]}_{box[2]}_{box[3]}"
-                    self.current_people.add(person_id)
-                    dfine_detections.append({
-                        'bbox': tuple(box),
-                        'class': 'person',
-                        'confidence': score,
-                        'source': 'dfine',
-                        'id': person_id
-                    })
-        
-        # Combine detections using non-maximum suppression
-        combined_detections = self._combine_detections(yolo_detections, dfine_detections)
-        
-        # Initialize behaviors
-        behaviors = {
-            'total': len(self.current_people),
-            'standing': 0,
-            'sitting': 0,
-            'using_phone': 0
-        }
-        
-        # Process each detection
-        for detection in combined_detections:
-            if detection['class'] == 'person':
-                # Analyze pose
-                pose = self.behavior_analyzer.analyze_pose(detection['bbox'])
-                if pose == 'standing':
-                    behaviors['standing'] += 1
-                else:
-                    behaviors['sitting'] += 1
-                
-                # Check phone usage
-                if self.behavior_analyzer.check_phone_usage(detection['bbox'], phone_boxes):
+                # Handle phone detection
+                elif class_name == 'phone':
                     behaviors['using_phone'] += 1
                 
-                # Draw bounding box
-                x1, y1, x2, y2 = detection['bbox']
-                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                # Draw bounding box with different colors for different classes
+                if class_name == 'standing':
+                    color = (0, 255, 0)  # Green for standing
+                elif class_name == 'sitting':
+                    color = (255, 0, 0)  # Red for sitting
+                else:  # phone
+                    color = (0, 0, 255)  # Blue for phone
                 
-                # Draw label
-                label = f"Person ({pose}): {detection['confidence']:.2f}"
+                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                
+                # Draw label with class and confidence
+                label = f"{class_name}: {conf:.2f}"
                 cv2.putText(frame, label, (x1, y1 - 10),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+        
+        # Update total count based on current detections
+        behaviors['total'] = len(self.current_people)
         
         # Add statistics overlay
         cv2.putText(frame, f"FPS: {self.fps:.1f}", (10, 30),
                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-        cv2.putText(frame, f"Total: {behaviors['total']}", (10, 60),
+        cv2.putText(frame, f"Total People: {behaviors['total']}", (10, 60),
                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         cv2.putText(frame, f"Standing: {behaviors['standing']}", (10, 90),
                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)

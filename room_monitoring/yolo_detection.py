@@ -9,13 +9,15 @@ import csv
 import json
 
 # Model path
-YOLO_MODEL_PATH = 'trained_models/trained_model4.pt'
+YOLO_MODEL_PATH = 'trained_models/trained_model7.pt' 
 
 class YOLORoomMonitor:
     def __init__(self, device: str = 'cpu'):
         self.device = device
         print("Loading YOLO model...")
         self.model = YOLO(YOLO_MODEL_PATH)
+        print(f"Model loaded successfully from {YOLO_MODEL_PATH}")
+        print(f"Model classes: {self.model.names}")
         self.frame_count = 0
         self.fps = 0
         self.prev_time = time.time()
@@ -94,8 +96,8 @@ class YOLORoomMonitor:
         height = frame.shape[0]
         entry_y = int(height * self.entry_line)
         
-        # Get detections
-        results = self.model(frame, conf=0.5, device=self.device)
+        # Get detections with lower confidence threshold
+        results = self.model(frame, conf=0.25, device=self.device)  # Lower confidence threshold
         
         # Initialize behavior counts
         behaviors = {
@@ -104,9 +106,6 @@ class YOLORoomMonitor:
             'sitting': 0,
             'using_phone': 0
         }
-        
-        # Track phones
-        phone_boxes = []
         
         # Clear current people set for this frame
         self.current_people.clear()
@@ -120,16 +119,18 @@ class YOLORoomMonitor:
                 conf = float(box.conf[0])
                 class_name = self.model.names[cls]
                 
-                if class_name == 'person':
-                    # Calculate center point for entry/exit detection
-                    center_y = (y1 + y2) / 2
-                    person_id = f"{x1}_{y1}_{x2}_{y2}"  # Simple ID based on position
+                # Calculate center point for entry/exit detection
+                center_y = (y1 + y2) / 2
+                person_id = f"{x1}_{y1}_{x2}_{y2}"
+                
+                # Only track people (sitting or standing)
+                if class_name in ['sitting', 'standing']:
                     self.current_people.add(person_id)
                     
                     # Check for entry/exit
                     if person_id not in self.last_positions:
                         self.last_positions[person_id] = center_y
-                        self.total_count += 1  # New person detected
+                        self.total_count += 1
                     else:
                         last_y = self.last_positions[person_id]
                         if last_y < entry_y and center_y >= entry_y:
@@ -138,27 +139,30 @@ class YOLORoomMonitor:
                             self.total_count -= 1
                         self.last_positions[person_id] = center_y
                     
-                    # Analyze pose
-                    pose = self.analyze_pose((x1, y1, x2, y2))
-                    if pose == 'standing':
+                    # Update behavior counts
+                    if class_name == 'standing':
                         behaviors['standing'] += 1
-                    else:
+                    elif class_name == 'sitting':
                         behaviors['sitting'] += 1
-                    
-                    # Draw bounding box
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                    
-                    # Draw label with pose
-                    label = f"Person ({pose}): {conf:.2f}"
-                    cv2.putText(frame, label, (x1, y1 - 10),
-                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-                    
-                elif class_name == 'cell phone':
-                    phone_boxes.append((x1, y1, x2, y2))
+                
+                # Handle phone detection
+                elif class_name == 'phone':
                     behaviors['using_phone'] += 1
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
-                    cv2.putText(frame, f"Phone: {conf:.2f}", (x1, y1 - 10),
-                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+                
+                # Draw bounding box with different colors for different classes
+                if class_name == 'standing':
+                    color = (0, 255, 0)  # Green for standing
+                elif class_name == 'sitting':
+                    color = (255, 0, 0)  # Red for sitting
+                else:  # phone
+                    color = (0, 0, 255)  # Blue for phone
+                
+                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                
+                # Draw label with class and confidence
+                label = f"{class_name}: {conf:.2f}"
+                cv2.putText(frame, label, (x1, y1 - 10),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
         
         # Update total count based on current detections
         behaviors['total'] = len(self.current_people)
@@ -172,7 +176,7 @@ class YOLORoomMonitor:
         # Add statistics overlay
         cv2.putText(frame, f"FPS: {self.fps:.1f}", (10, 30),
                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-        cv2.putText(frame, f"Total: {behaviors['total']}", (10, 60),
+        cv2.putText(frame, f"Total People: {behaviors['total']}", (10, 60),
                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         cv2.putText(frame, f"Standing: {behaviors['standing']}", (10, 90),
                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
