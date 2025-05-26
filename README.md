@@ -186,6 +186,6 @@ python object_detection/object_detection_app.py --input path/to/input --model [y
 
 ## Acknowledgments
 
-- YOLO model: [Ultralytics](https://github.com/ultralytics/yolov5)
-- DFine model: [USTC Community](https://github.com/ustc-community/dfine)
+- YOLO model: [Ultralytics](https://docs.ultralytics.com/tasks/detect/#models)
+- DFine model: [USTC Community](https://huggingface.co/collections/ustc-community/d-fine-68109b427cbe6ee36b4e7352)
 - OpenCV for computer vision capabilities
