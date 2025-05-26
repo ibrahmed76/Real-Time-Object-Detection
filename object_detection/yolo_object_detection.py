@@ -44,7 +44,7 @@ def process_image(model, image_path, output_path):
 
 def process_folder():
     # Initialize YOLO model
-    model_path = os.path.join('models', 'yolo11x.pt')
+    model_path = os.path.join('models', 'yolo11s.pt')
     model = YOLO(model_path)
 
     # Create images directory and its subdirectories if they don't exist

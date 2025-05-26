@@ -27,10 +27,11 @@ def train_yolov11x():
         'cache': False,         # Cache images in memory
         'exist_ok': False,      # Overwrite existing experiment
         'pretrained': True,     # Use pretrained weights
-        'optimizer': 'auto',    # Optimizer (SGD, Adam, etc.)
+        'optimizer': 'Adam',    # Optimizer (SGD, Adam, etc.)
         'verbose': True,        # Print verbose output
         'seed': 42,            # Random seed for reproducibility
         'deterministic': True,  # Deterministic training
+        'lr0': 0.00001,          # Learning rate
     }
 
     # Start training
