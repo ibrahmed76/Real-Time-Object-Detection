@@ -24,8 +24,6 @@ class SmartRoomMonitor:
         # Initialize both models
         print("Loading YOLO model...")
         self.yolo_model = YOLO(YOLO_MODEL_PATH)
-        print(f"YOLO model loaded successfully from {YOLO_MODEL_PATH}")
-        print(f"YOLO model classes: {self.yolo_model.names}")
         
         print("Loading DFine model...")
         self.dfine_processor = AutoImageProcessor.from_pretrained(DFINE_MODEL_PATH)
